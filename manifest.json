@@ -1,11 +1,19 @@
 {
   "manifest_version": 2,
   "name": "IntelliDark",
-  "description": "Intelligent Color Inverter",
+  "description": "An intelligent dark theme for the internet!",
   "version": "1.0",
   "browser_action": {
-    "default_icon": "./res/moon.png",
     "default_popup": "popup.html"
+  },
+  "icons": {
+    "16": "./res/moon16.png",
+    "24": "./res/moon24.png",
+    "32": "./res/moon32.png",
+    "64": "./res/moon64.png",
+    "128": "./res/moon128.png",
+    "256": "./res/moon256.png",
+    "512": "./res/moon512.png"
   },
   "permissions": [
     "activeTab",
@@ -14,6 +22,12 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
+      "css": ["invert.css"],
+      "js": ["main.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["chrome://*/*"],
       "css": ["invert.css"],
       "js": ["main.js"],
       "run_at": "document_start"

@@ -1,11 +1,12 @@
 @media screen{
     html{
-        filter: invert(100%) hue-rotate(180deg) !important;
+        /*filter: invert(100%) hue-rotate(180deg) !important;*/
         background-color: #000000 !important;
+        min-height: 100%;
     }
-    /*brightness(90%) contrast(90%) grayscale(20%) sepia(30%)*/
-    img, video, canvas, iframe {
-        filter: invert(100%) hue-rotate(180deg) !important;
+    img, video, canvas, iframe, svg image{
+        /*filter: invert(100%) hue-rotate(180deg) !important;*/
     }
+    /*brightness(90%) contrast(90%) grayscale(20%) sepia(30%)* hue-rotate(180deg)*/
 }
 
