@@ -1,2 +1,2 @@
 # IntelliDark
-IntelliDark: Creating an intelligent dark theme for every website
+IntelliDark: An intelligent dark theme for the internet!
