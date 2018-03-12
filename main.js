@@ -273,7 +273,6 @@
         }
     }
     function handleBoxShadow(element, style){
-        console.log(style.boxShadow);
         let shadow = style.boxShadow;
         let index = 0;
         let funcSections = [];
@@ -285,7 +284,6 @@
             funcSections[funcSections.length - 1].push(index);
         }
         index = 0;
-        console.log(funcSections);
         let lastArgIndex = 0;
         let args = [];
 
@@ -331,7 +329,6 @@
                 }
             }
             element.style.boxShadow = newShadow;
-            console.log(element);
         }
     }
     let Color = function(r, g, b, a){
