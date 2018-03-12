@@ -7,12 +7,17 @@
     window.addEventListener("load", function() {
         console.log('Load Event Fired');
         let time = performance.now();
-        let eltCount = updateElement(document.body, true);
-        time = Number(performance.now() - time).toFixed(2);
-        console.log('IntelliDark Update Complete (' + eltCount + ' nodes | ' + time + 'ms)');
+        updateElement(document.body, true, function(eltCount){
+            time = Math.round(performance.now() - time);
+            console.log('IntelliDark Update Complete (' + eltCount + ' nodes | ' + time + 'ms)');
+            console.log(imageResults);
+        });
     });
-    function updateElement(element, parentStatus){
-        let count = 1;
+    function updateElement(element, parentStatus, fn){
+        let eltCount = 1;
+        let childCount = element.children.length;
+        let updatedChildCount = 0;
+        let updateChildren = true;
         //parentStatus = parent rendered "normally"; No JavaScript Manipulations
         let status = parentStatus;
         if(ignoredNodes.indexOf(element.nodeName) === -1){
@@ -21,10 +26,63 @@
                 let backgroundImage = style.backgroundImage;
                 if(backgroundImage.startsWith('url')){
                     console.log("We have a background image!");
-                    getImageData(backgroundImage);
+                    updateChildren = false;
+                    console.log(style.backgroundPosition);
+                    getImageData(backgroundImage, function(imageData){
+                        if(imageData.average.a === 0){
+                            console.log("We have a transparent image!");
+                            let color = Color.fromRGBString(style.backgroundColor);
+                            if(!color.isTransparent()){
+                                if(color.l >= lightnessThreshold){
+                                    color.l = 1 - color.l;
+                                    element.style.setProperty('background-color', color.stringify(), 'important');
+                                    for(let i = 0; i < styles.length; i ++){
+                                        let rawStyle = style.getPropertyValue(styles[i]);
+                                        if(rawStyle){
+                                            let color = Color.fromRGBString(rawStyle);
+                                            if(color.l < 1 - lightnessThreshold){
+                                                color.l = 1 - color.l;
+                                                element.style.setProperty(styles[i], color.stringify(), 'important');
+                                            }
+                                        }
+                                    }
+                                    status = false;
+                                }else{
+                                    status = true;
+                                }
+                            }else{
+                                console.log(status);
+                                if(!status){
+                                    for(let i = 0; i < styles.length; i ++){
+                                        let rawStyle = style.getPropertyValue(styles[i]);
+                                        if(rawStyle){
+                                            let color = Color.fromRGBString(rawStyle);
+                                            if(color.l < 1 - lightnessThreshold){
+                                                color.l = 1 - color.l;
+                                                element.style.setProperty(styles[i], color.stringify(), 'important');
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if(childCount === 0){
+                            fn(eltCount);
+                        }else{
+                            for(let i = 0; i < childCount; i ++){
+                                updateElement(element.children[i], status, function(childEltCount){
+                                    eltCount += childEltCount;
+                                    updatedChildCount ++;
+                                    if(updatedChildCount === childCount){
+                                        fn(eltCount);
+                                    }
+                                });
+                            }
+                        }
+                    });
                     status = true;
                 }else{
-                    console.log("We have an unidentified background image! " + backgroundImage);
+                    console.log("We have a background gradient!");
                     let newBG = handleBGGradient(backgroundImage);
                     if(newBG !== null){
                         element.style.setProperty('background-image', newBG, 'important');
@@ -47,7 +105,7 @@
                 let color = Color.fromRGBString(style.backgroundColor);
                 if(!color.isTransparent()){
                     //Element has a background color.
-                        if(color.l >= lightnessThreshold){
+                    if(color.l >= lightnessThreshold){
                         color.l = 1 - color.l;
                         element.style.setProperty('background-color', color.stringify(), 'important');
                         for(let i = 0; i < styles.length; i ++){
@@ -80,13 +138,26 @@
                     }
                 }
             }
+        }else{
+            updatedChildCount ++;
         }
-        for(let i = 0; i < element.children.length; i ++){
-            count += updateElement(element.children[i], status);
+        if(updateChildren){
+            if(childCount === 0){
+                fn(eltCount);
+            }else{
+                for(let i = 0; i < childCount; i ++){
+                    updateElement(element.children[i], status, function(childEltCount){
+                        eltCount += childEltCount;
+                        updatedChildCount ++;
+                        if(updatedChildCount === childCount){
+                            fn(eltCount);
+                        }
+                    });
+                }
+            }
         }
-        return count;
     }
-    function getImageData(rawUrl){
+    function getImageData(rawUrl, fn){
         if(rawUrl.startsWith('url')){
             if(imageResults.hasOwnProperty(rawUrl)){
                 let color = imageResults[rawUrl];
@@ -148,20 +219,17 @@
                             a: aVar
                         };
                     }
-
-                    imageResults[rawUrl] = {
-                        avgerage: averageColor,
+                    let resultsObj = {
+                        average: averageColor,
                         variance: variance
                     };
-                    // console.log(rawUrl);
-                    // console.log(averageColor);
-                    // console.log(variance);
+                    imageResults[rawUrl] = resultsObj;
+                    fn(resultsObj);
                 }
             }
         }
     }
     function handleBGGradient(backgroundImage){
-        //-webkit-linear-gradient(top, rgb(245, 245, 245), rgb(241, 241, 241))
         let funcNameEnd = backgroundImage.indexOf('(');
         let funcName = backgroundImage.slice(0, funcNameEnd);
         let rawArgs = backgroundImage.slice(funcNameEnd + 1, -1);
@@ -199,22 +267,35 @@
         for(let i = 0; i < args.length; i++){
             let arg = args[i];
             if(arg.startsWith('rgb')){
-                let color = Color.fromRGBString(arg);
+                let color;
+                let position = null;
+                if(arg.endsWith(')')){
+                    color = Color.fromRGBString(arg);
+                }else{
+                    let index = arg.indexOf(')') + 1;
+                    color = Color.fromRGBString(arg.slice(0, index));
+                    position = arg.slice(index + 1);
+                }
                 avgLight += color.l;
-                colors[i] = color;
+                colors[i] = {};
+                colors[i].color = color;
+                colors[i].position = position;
             }
         }
         avgLight /= args.length;
         if(avgLight > lightnessThreshold){
             //The brightness is light on average; invert.
             for(let i in colors){
-                let color =  colors[i];
+                let color =  colors[i].color;
                 color.l = 1 - color.l;
             }
             let styleString = funcName + '(';
             for(let i = 0; i < args.length; i ++){
                 if(colors.hasOwnProperty(i)){
-                    styleString += colors[i].stringify();
+                    styleString += colors[i].color.stringify();
+                    if(colors[i].position !== null){
+                        styleString += ' ' + colors[i].position;
+                    }
                 }else{
                     styleString += args[i];
                 }
