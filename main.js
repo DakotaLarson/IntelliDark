@@ -27,8 +27,7 @@
                 if(backgroundImage.startsWith('url')){
                     console.log("We have a background image!");
                     updateChildren = false;
-                    console.log(style.backgroundPosition);
-                    getImageData(backgroundImage, function(imageData){
+                    getImageData(backgroundImage, style.backgroundPositionX, style.backgroundPositionY, style.width, style.height, function(imageData){
                         if(imageData.average.a === 0){
                             console.log("We have a transparent image!");
                             if(darkenBackgroundColor(element, style) || !status){
@@ -119,8 +118,10 @@
             }
         }
     }
-    function getImageData(rawUrl, fn){
+    function getImageData(rawUrl, rawXPos, rawYPos, width, height, fn){
         if(rawUrl.startsWith('url')){
+            let xPos = parseInt(rawXPos);
+            let yPos = parseInt(rawYPos);
             if(imageResults.hasOwnProperty(rawUrl)){
                 let color = imageResults[rawUrl];
                 console.log(color);
