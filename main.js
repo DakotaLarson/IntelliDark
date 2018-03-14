@@ -27,7 +27,7 @@
                 if(backgroundImage.startsWith('url')){
                     console.log("We have a background image!");
                     updateChildren = false;
-                    getImageData(backgroundImage, style.backgroundPositionX, style.backgroundPositionY, style.width, style.height, function(imageData){
+                    getImageData(backgroundImage, style, function(imageData){
                         if(imageData.average.a === 0){
                             console.log("We have a transparent image!");
                             if(darkenBackgroundColor(element, style) || !status){
@@ -118,77 +118,83 @@
             }
         }
     }
-    function getImageData(rawUrl, rawXPos, rawYPos, width, height, fn){
-        if(rawUrl.startsWith('url')){
-            let xPos = parseInt(rawXPos);
-            let yPos = parseInt(rawYPos);
-            if(imageResults.hasOwnProperty(rawUrl)){
-                let color = imageResults[rawUrl];
-                console.log(color);
-            }else{
-                let imgUrl = rawUrl.slice(5, -2);
-                let imgElt = new Image;
-                imgElt.crossOrigin = 'anonymous';
-                imgElt.src = imgUrl;
-                imgElt.onload = function(){
-                    let canvasElt = document.createElement('canvas');
-                    canvasElt.height = imgElt.height;
-                    canvasElt.width = imgElt.width;
-                    let canvasCtx = canvasElt.getContext('2d');
-                    canvasCtx.drawImage(imgElt, 0, 0);
-                    let imgData = canvasCtx.getImageData(0, 0, canvasElt.width, canvasElt.height);
-                    let rAvg = 0;
-                    let gAvg = 0;
-                    let bAvg = 0;
-                    let aAvg = 0;
-                    let pixelCount = imgData.width * imgData.height;
+    function getImageData(rawUrl, style, fn){
+        let rawXPos = style.backgroundPositionX;
+        let rawYPos = style.backgroundPositionY;
+        let width = style.width;
+        let height = style.height;
+        let size = style.backgroundSize;
+        console.log(rawXPos + ' ' + rawYPos);
+        let xPos = rawXPos.endsWith('px') ? Math.min(parseInt(rawXPos), 0) : 0;
+        let yPos = rawYPos.endsWith('px') ? Math.min(parseInt(rawYPos), 0) : 0;
+        console.log(xPos + " " + yPos);
+
+        if(imageResults.hasOwnProperty(rawUrl)){
+            let color = imageResults[rawUrl];
+            console.log(color);
+        }else{
+            let imgUrl = rawUrl.slice(5, -2);
+            let imgElt = new Image;
+            imgElt.crossOrigin = 'anonymous';
+            imgElt.src = imgUrl;
+            imgElt.onload = function(){
+                let canvasElt = document.createElement('canvas');
+                canvasElt.height = imgElt.height;
+                canvasElt.width = imgElt.width;
+                let canvasCtx = canvasElt.getContext('2d');
+                canvasCtx.drawImage(imgElt, 0, 0);
+                let imgData = canvasCtx.getImageData(0, 0, canvasElt.width, canvasElt.height);
+                let rAvg = 0;
+                let gAvg = 0;
+                let bAvg = 0;
+                let aAvg = 0;
+                let pixelCount = imgData.width * imgData.height;
+                //compute average
+                for(let i = 0; i < pixelCount; i ++){
+                    rAvg += imgData.data[4 * i];
+                    gAvg += imgData.data[4 * i + 1];
+                    bAvg += imgData.data[4 * i + 2];
+                    aAvg += imgData.data[4 * i + 3];
+                }
+                rAvg = Math.floor(rAvg / pixelCount);
+                gAvg = Math.floor(gAvg / pixelCount);
+                bAvg = Math.floor(bAvg / pixelCount);
+                aAvg = Math.floor(aAvg / pixelCount);
+                let averageColor = new Color(rAvg, gAvg, bAvg, aAvg);
+                let variance;
+                if(aAvg === 0){
+                    //The image is transparent.
+                    variance = {};
+                }else{
+                    //compute variance
+                    let rVar = 0;
+                    let gVar = 0;
+                    let bVar = 0;
+                    let aVar = 0;
                     //compute average
                     for(let i = 0; i < pixelCount; i ++){
-                        rAvg += imgData.data[4 * i];
-                        gAvg += imgData.data[4 * i + 1];
-                        bAvg += imgData.data[4 * i + 2];
-                        aAvg += imgData.data[4 * i + 3];
+                        rVar += Math.pow(imgData.data[4 * i] - rAvg, 2);
+                        gVar += Math.pow(imgData.data[4 * i + 1] - gAvg, 2);
+                        bVar += Math.pow(imgData.data[4 * i + 2] - bAvg, 2);
+                        aVar += Math.pow(imgData.data[4 * i + 3] - aAvg, 2);
                     }
-                    rAvg = Math.floor(rAvg / pixelCount);
-                    gAvg = Math.floor(gAvg / pixelCount);
-                    bAvg = Math.floor(bAvg / pixelCount);
-                    aAvg = Math.floor(aAvg / pixelCount);
-                    let averageColor = new Color(rAvg, gAvg, bAvg, aAvg);
-                    let variance;
-                    if(aAvg === 0){
-                        //The image is transparent.
-                        variance = {};
-                    }else{
-                        //compute variance
-                        let rVar = 0;
-                        let gVar = 0;
-                        let bVar = 0;
-                        let aVar = 0;
-                        //compute average
-                        for(let i = 0; i < pixelCount; i ++){
-                            rVar += Math.pow(imgData.data[4 * i] - rAvg, 2);
-                            gVar += Math.pow(imgData.data[4 * i + 1] - gAvg, 2);
-                            bVar += Math.pow(imgData.data[4 * i + 2] - bAvg, 2);
-                            aVar += Math.pow(imgData.data[4 * i + 3] - aAvg, 2);
-                        }
-                        rVar /= (pixelCount -1);
-                        gVar /= (pixelCount -1);
-                        bVar /= (pixelCount -1);
-                        aVar /= (pixelCount -1);
-                        variance = {
-                            r: rVar,
-                            g: gVar,
-                            b: bVar,
-                            a: aVar
-                        };
-                    }
-                    let resultsObj = {
-                        average: averageColor,
-                        variance: variance
+                    rVar /= (pixelCount -1);
+                    gVar /= (pixelCount -1);
+                    bVar /= (pixelCount -1);
+                    aVar /= (pixelCount -1);
+                    variance = {
+                        r: rVar,
+                        g: gVar,
+                        b: bVar,
+                        a: aVar
                     };
-                    imageResults[rawUrl] = resultsObj;
-                    fn(resultsObj);
                 }
+                let resultsObj = {
+                    average: averageColor,
+                    variance: variance
+                };
+                imageResults[rawUrl] = resultsObj;
+                fn(resultsObj);
             }
         }
     }
