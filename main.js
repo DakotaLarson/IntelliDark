@@ -374,7 +374,4 @@
     Color.prototype.isTransparent = function(){
         return this.a === 0;
     };
-    Color.prototype.isTranslucent = function(){
-        return this.a < 1;
-    };
 }());
