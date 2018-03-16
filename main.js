@@ -25,7 +25,8 @@
                 if(backgroundImage.startsWith('url')){
                     console.log("We have a background image!");
                     updateChildren = false;
-                    handleImage(backgroundImage, style, childCount, function(imageStatus){
+                    handleImage(backgroundImage, style, childCount, function(imageStatus, url){
+                        console.log(imageStatus);
                         console.log(element);
                         if(imageStatus === 0){
                             if(darkenBackgroundColor(element, style) || !status){
@@ -34,6 +35,9 @@
                             }else{
                                 status = true;
                             }
+                        }else if(imageStatus === 2){
+                            //element.style.setProperty('background-image', 'url(' + url + ')', 'important');
+                            status = false;
                         }else{
                             status = true;
                         }
@@ -127,7 +131,6 @@
         let rawWidth = style.width;
         let rawHeight = style.height;
         let size = style.backgroundSize;
-        console.log(rawXPos + ' ' + rawYPos);
         let xPos = rawXPos.endsWith('px') ? Math.min(parseInt(rawXPos), 0) * -1 : 0;
         let yPos = rawYPos.endsWith('px') ? Math.min(parseInt(rawYPos), 0) * -1 : 0;
         let width = rawWidth.endsWith('px') ? parseInt(rawWidth) : 0;
@@ -137,6 +140,9 @@
         imgElt.crossOrigin = 'anonymous';
         imgElt.src = imgUrl;
         imgElt.onload = function(){
+            if(imgUrl === 'https://ssl.gstatic.com/gb/images/i2_2ec824b0.png'){
+                console.log('x');
+            }
             let canvasElt = document.createElement('canvas');
             canvasElt.height = imgElt.height;
             canvasElt.width = imgElt.width;
@@ -166,6 +172,7 @@
                 let averageColor = new Color(rAvg, gAvg, bAvg, transparency);
                 let variance = {};
                 if(pixelCount === 0){
+                    console.log(imgUrl);
                     //The image is transparent.
                     fn(0);
                 }else{
@@ -184,27 +191,31 @@
                     variance.r = rVar / (pixelCount - 1);
                     variance.g = gVar / (pixelCount - 1);
                     variance.b = bVar / (pixelCount - 1);
-                }
-                let resultsObj = {
-                    average: averageColor,
-                    variance: variance,
-                    total: pixelCount
-                };
-                //change to use "threshold" of sorts
-                if(variance.r === 0 && variance.g === 0 && variance.b === 0){
-                    console.log(childCount);
-                    console.log(resultsObj);
-                    for(let i = 0; i < totalPixelCount; i ++){
-                        if (imgData.data[4 * i + 3] > 0) {
-                            rAvg += imgData.data[4 * i];
-                            gAvg += imgData.data[4 * i + 1];
-                            bAvg += imgData.data[4 * i + 2];
-                            pixelCount++;
+                    let resultsObj = {
+                        average: averageColor,
+                        variance: variance,
+                        total: pixelCount
+                    };
+                    //change to use "threshold" of sorts
+                    if(variance.r === 0 && variance.g === 0 && variance.b === 0 && childCount === 0){
+                        for(let i = 0; i < totalPixelCount; i ++){
+                            if (imgData.data[4 * i + 3] > 0) {
+                                let color = new Color(imgData.data[4 * i], imgData.data[4 * i + 1], imgData.data[4 * i + 2], imgData.data[4 * i + 3]);
+                                color.l = 1 - color.l;
+                                let newColor = color.toRGB();
+                                imgData.data[4 * i] = newColor.r;
+                                imgData.data[4 * i + 1] = newColor.g;
+                                imgData.data[4 * i + 2] = newColor.b;
+                                pixelCount++;
+                            }
                         }
+                        canvasCtx.putImageData(imgData, xPos, yPos);
+                        let url = canvasElt.toDataURL();
+                        fn(2, url);
+                    }else{
+                        fn(1);
                     }
                 }
-
-                fn(1);
             }else{
                 fn(0);
             }
@@ -392,4 +403,33 @@
     Color.prototype.isTransparent = function(){
         return this.a === 0;
     };
+    Color.prototype.toRGB = function(){
+        let r, g, b;
+        if(this.s === 0){
+            r = 1;
+            g = 1;
+            b = 1;
+        }else{
+            function hue2rgb(p, q, t){
+                if(t < 0) t += 1;
+                if(t > 1) t -= 1;
+                if(t < 1/6) return p + (q - p) * 6 * t;
+                if(t < 1/2) return q;
+                if(t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                return p;
+            }
+
+            let q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            let  p = 2 * l - q;
+            r = hue2rgb(p, q, this.h + 1/3);
+            g = hue2rgb(p, q, this.h);
+            b = hue2rgb(p, q, this.h - 1/3);
+        }
+
+        return {
+            r: r * 255,
+            g: g * 255,
+            b: b * 255
+        };
+    }
 }());
