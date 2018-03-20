@@ -1,14 +1,19 @@
 (function(){
-    const ignoredNodes = ['STYLE', 'SCRIPT', 'NOSCRIPT', 'IMG', 'VIDEO', 'CANVAS'];
+    const ignoredNodes = ['STYLE', 'SCRIPT', 'NOSCRIPT', 'IMG', 'VIDEO', 'CANVAS', 'IFRAME'];
     const styles = ['border-left-color', 'border-top-color', 'border-right-color', 'border-bottom-color', 'caret-color', 'outline-color', 'text-decoration-color', 'color'];
     const lightnessThreshold = 0.5;
     console.log(location.href);
+    document.documentElement.setAttribute('intellidark', 'false');
+    observeStyleSheets(function(){
+        console.log('stylesheets loaded');
+    });
     window.addEventListener("load", function() {
-        console.log('Load Event Fired');
+        console.log('load');
         let time = performance.now();
-        updateElement(document.body, true, function(eltCount){
+        updateElement(document.body, false, function(eltCount){
             time = Math.round(performance.now() - time);
             console.log('IntelliDark Update Complete (' + eltCount + ' nodes | ' + time + 'ms)');
+            observeMutations();
         });
     });
     function updateElement(element, parentStatus, fn){
@@ -23,11 +28,8 @@
             if(style.backgroundImage !== 'none'){
                 let backgroundImage = style.backgroundImage;
                 if(backgroundImage.startsWith('url')){
-                    console.log("We have a background image!");
                     updateChildren = false;
                     handleImage(backgroundImage, style, childCount, function(imageStatus, url){
-                        console.log(imageStatus);
-                        console.log(element);
                         if(imageStatus === 0){
                             if(darkenBackgroundColor(element, style) || !status){
                                 lightenColorStyles(element, style);
@@ -36,22 +38,28 @@
                                 status = true;
                             }
                         }else if(imageStatus === 2){
-                            //element.style.setProperty('background-image', 'url(' + url + ')', 'important');
+                            element.style.setProperty('background-image', 'url(' + url + ')', 'important');
                             status = false;
                         }else{
                             status = true;
                         }
-                        if(childCount === 0){
+                        if(element.hasAttribute('intellidark') && element.getAttribute('intellidark') === String(status)){
+                            //Element updated before; current update has no changes; Do not continue.
                             fn(eltCount);
                         }else{
-                            for(let i = 0; i < childCount; i ++){
-                                updateElement(element.children[i], status, function(childEltCount){
-                                    eltCount += childEltCount;
-                                    updatedChildCount ++;
-                                    if(updatedChildCount === childCount){
-                                        fn(eltCount);
-                                    }
-                                });
+                            element.setAttribute('intellidark', String(status));
+                            if(childCount === 0){
+                                fn(eltCount);
+                            }else{
+                                for(let i = 0; i < childCount; i ++){
+                                    updateElement(element.children[i], status, function(childEltCount){
+                                        eltCount += childEltCount;
+                                        updatedChildCount ++;
+                                        if(updatedChildCount === childCount){
+                                            fn(eltCount);
+                                        }
+                                    });
+                                }
                             }
                         }
                     });
@@ -77,17 +85,23 @@
             updatedChildCount ++;
         }
         if(updateChildren){
-            if(childCount === 0){
+            if(element.hasAttribute('intellidark') && element.getAttribute('intellidark') === String(status)){
+                //Element updated before; current update has no changes; Do not continue.
                 fn(eltCount);
             }else{
-                for(let i = 0; i < childCount; i ++){
-                    updateElement(element.children[i], status, function(childEltCount){
-                        eltCount += childEltCount;
-                        updatedChildCount ++;
-                        if(updatedChildCount === childCount){
-                            fn(eltCount);
-                        }
-                    });
+                element.setAttribute('intellidark', String(status));
+                if(childCount === 0){
+                    fn(eltCount);
+                }else{
+                    for(let i = 0; i < childCount; i ++){
+                        updateElement(element.children[i], status, function(childEltCount){
+                            eltCount += childEltCount;
+                            updatedChildCount ++;
+                            if(updatedChildCount === childCount){
+                                fn(eltCount);
+                            }
+                        });
+                    }
                 }
             }
         }
@@ -106,7 +120,10 @@
     }
     function lightenColorStyles(element, rawStyle){
         if(rawStyle.boxShadow !== 'none'){
-            handleBoxShadow(element, rawStyle);
+            handleShadow(element, 'box-shadow', rawStyle, false);
+        }
+        if(rawStyle.textShadow !== 'none'){
+            handleShadow(element, 'text-shadow', rawStyle, true);
         }
         for(let i = 0; i < styles.length; i ++){
             let style = rawStyle.getPropertyValue(styles[i]);
@@ -140,15 +157,12 @@
         imgElt.crossOrigin = 'anonymous';
         imgElt.src = imgUrl;
         imgElt.onload = function(){
-            if(imgUrl === 'https://ssl.gstatic.com/gb/images/i2_2ec824b0.png'){
-                console.log('x');
-            }
             let canvasElt = document.createElement('canvas');
             canvasElt.height = imgElt.height;
             canvasElt.width = imgElt.width;
             let canvasCtx = canvasElt.getContext('2d');
-            canvasCtx.drawImage(imgElt, 0, 0);
-            let imgData = canvasCtx.getImageData(xPos, yPos, width, height);
+            canvasCtx.drawImage(imgElt, xPos, yPos, width, height, 0, 0, width, height);
+            let imgData = canvasCtx.getImageData(0, 0, width, height);
             let rAvg = 0;
             let gAvg = 0;
             let bAvg = 0;
@@ -302,8 +316,8 @@
             return null;
         }
     }
-    function handleBoxShadow(element, style){
-        let shadow = style.boxShadow;
+    function handleShadow(element, name, style, darken){
+        let shadow = style.getPropertyValue(name);
         let index = 0;
         let funcSections = [];
         while(index < shadow.length){
@@ -345,7 +359,11 @@
             }
         }
         avgLightness /= colorCount;
-        if(avgLightness < lightnessThreshold){
+        let bool = avgLightness < lightnessThreshold;
+        if(darken){
+            bool = avgLightness > lightnessThreshold;
+        }
+        if(bool){
             let newShadow = '';
             for(let i = 0; i < args.length; i ++){
                 if(colors.hasOwnProperty(i)){
@@ -358,8 +376,90 @@
                     newShadow += ' ';
                 }
             }
-            element.style.boxShadow = newShadow;
+            element.style.setProperty('box-shadow', newShadow, 'important')
         }
+    }
+    function observeMutations(){
+        let options = {
+            childList: true,
+            attributes: true,
+            subtree: true
+        };
+        let observer = new MutationObserver(function(mutations){
+            for(let i = 0; i < mutations.length; i ++){
+                let mutation = mutations[i];
+                console.log(mutation.type);
+                if(mutation.type === 'attributes'){
+                    if(mutation.target.parentElement.hasAttribute('intellidark')){
+                        let status = mutation.target.parentElement.getAttribute('intellidark');
+                        updateElement(mutation.target, status, function(eltCount){
+                            //console.log('M-Attr: ' + eltCount + ' node(s) updated.');
+                        });
+                    }else{
+                        console.warn('Element parent doesn\'t have correct attribute');
+                        console.warn(mutation.target.parentElement);
+                    }
+                }else if(mutation.type === 'childList'){
+                    if(mutation.target.hasAttribute('intellidark')){
+                        let status = mutation.target.getAttribute('intellidark');
+                        let eltTotal = 0;
+                        let eltUpdateTotal = 0;
+                        let eltCount = mutation.addedNodes.length;
+                        for(let i = 0; i < eltCount; i ++){
+                            updateElement(mutation.addedNodes[i], status, function(eltCount){
+                                eltUpdateTotal += eltCount;
+                                eltTotal ++;
+                                if(eltTotal === eltCount){
+                                    //console.log('M-ChLi: ' + eltUpdateTotal + ' node(s) updated.');
+                                }
+                            });
+                        }
+                    }else{
+                        console.warn('Element doesn\'t have correct attribute');
+                    }
+                }
+            }
+        });
+        observer.observe(document.body, options);
+    }
+    function observeStyleSheets(fn){
+        let options = {
+            childList: true,
+            subtree: true,
+        };
+        let linkCount = 0;
+        let loadedLinkCount = 0;
+        let domLoaded = false;
+        let observer = new MutationObserver(function(mutations){
+            for(let i = 0; i < mutations.length; i ++){
+                let mutation = mutations[i];
+                for(let i = 0; i < mutation.addedNodes.length; i ++){
+                    let node = mutation.addedNodes[i];
+                    let name = node.nodeName;
+                    if(name === 'LINK'){
+                        if(node.rel && node.rel === 'stylesheet'){
+                            linkCount ++;
+                            node.addEventListener('load', function(){
+                                loadedLinkCount ++;
+                                if(domLoaded && loadedLinkCount >= linkCount){
+                                    observer.disconnect();
+                                    fn();
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        });
+        observer.observe(document.documentElement, options);
+        window.addEventListener('DOMContentLoaded', function(){
+            domLoaded = true;
+            if(loadedLinkCount >= linkCount){
+                observer.disconnect();
+                fn();
+            }
+            console.log('DCL: ' + loadedLinkCount + '/' + linkCount + ' external stylesheets.');
+        });
     }
     let Color = function(r, g, b, a){
         r /= 255;
