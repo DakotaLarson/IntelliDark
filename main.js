@@ -6,6 +6,7 @@
     document.documentElement.setAttribute('intellidark', 'false');
     observeStyleSheets(function(){
         console.log('stylesheets loaded');
+        handleMultipleGradients();
     });
     window.addEventListener("load", function() {
         console.log('load');
@@ -13,7 +14,7 @@
         updateElement(document.body, false, function(eltCount){
             time = Math.round(performance.now() - time);
             console.log('IntelliDark Update Complete (' + eltCount + ' nodes | ' + time + 'ms)');
-            observeMutations();
+            //observeMutations();
         });
     });
     function updateElement(element, parentStatus, fn){
@@ -461,6 +462,43 @@
             console.log('DCL: ' + loadedLinkCount + '/' + linkCount + ' external stylesheets.');
         });
     }
+    function handleMultipleGradients(str){
+        str = "linear-gradient(rgb(255, 255, 255), rgb(153, 153, 153))";
+        let colors = [];
+        let strings = [];
+        let startIndex = str.indexOf('rgb');
+        let endIndex = str.indexOf(')', startIndex) + 1;
+        strings.push(str.slice(0, startIndex));
+        let avgLight = 0;
+        while(startIndex < str.length){
+            let color = Color.fromRGBString(str.slice(startIndex, endIndex));
+            colors.push(color);
+            avgLight += color.l;
+            startIndex = str.indexOf('rgb', endIndex);
+            if(startIndex === -1){
+                strings.push(str.slice(endIndex + 1));
+                break;
+            }else{
+                strings.push(str.slice(endIndex + 1, startIndex));
+            }
+            endIndex = str.indexOf(')', startIndex);
+        }
+        avgLight /= colors.length;
+        if(avgLight > lightnessThreshold){
+            for(let i = 0; i < colors.length; i ++){
+                let color = colors[i];
+                color.l = 1 - color.l;
+            }
+        }
+        console.log(colors);
+        console.log(strings);
+        let finalStr = strings[0];
+        for(let i = 0; i < colors.length; i ++){
+            finalStr += colors[i].stringify() + strings[i + 1];
+        }
+        console.log(str);
+        console.log(finalStr);
+    }
     let Color = function(r, g, b, a){
         r /= 255;
         g /= 255;
@@ -519,7 +557,7 @@
                 return p;
             }
 
-            let q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            let q = l < 0.5 ? l * (1 + this.s) : l + this.s - l * this.s;
             let  p = 2 * l - q;
             r = hue2rgb(p, q, this.h + 1/3);
             g = hue2rgb(p, q, this.h);
