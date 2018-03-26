@@ -1,7 +1,7 @@
 # IntelliDark
 IntelliDark: An intelligent dark theme for the internet!
 ## TODO
-  * Support multiple Background Gradients - Support multiple
+  * Handle background images that do not fill element
   * Improve MutationObserver efficiency
   * Initial inversion with filter
   * Test Text-Shadow
