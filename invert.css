@@ -2,7 +2,6 @@
     html{
         /*filter: invert(100%) hue-rotate(180deg) !important;*/
         background-color: #000000 !important;
-        min-height: 100%;
     }
     img, video, canvas, iframe, svg image{
         /*filter: invert(100%) hue-rotate(180deg) !important;*/

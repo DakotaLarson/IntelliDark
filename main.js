@@ -2,23 +2,35 @@
     const ignoredNodes = ['STYLE', 'SCRIPT', 'NOSCRIPT', 'IMG', 'VIDEO', 'CANVAS', 'IFRAME'];
     const styles = ['border-left-color', 'border-top-color', 'border-right-color', 'border-bottom-color', 'caret-color', 'outline-color', 'text-decoration-color', 'color'];
     const lightnessThreshold = 0.5;
-    console.log(location.href);
+    console.log(location);
     document.documentElement.setAttribute('intellidark', 'false');
     observeStyleSheets(function(){
         console.log('stylesheets loaded');
-        handleMultipleGradients();
+        console.log(document.styleSheets);
     });
     window.addEventListener("load", function() {
         console.log('load');
+        getNodeCount();
         let time = performance.now();
         updateElement(document.body, false, function(eltCount){
             time = Math.round(performance.now() - time);
             console.log('IntelliDark Update Complete (' + eltCount + ' nodes | ' + time + 'ms)');
-            //observeMutations();
+            observeMutations();
         });
     });
+    function getNodeCount(){
+        let time = performance.now();
+        let count = document.getElementsByTagName('*').length;
+        time = Math.round(performance.now() - time);
+        console.log(count + ' nodes | ' + time + 'ms');
+        return count;
+    }
     function updateElement(element, parentStatus, fn){
         let eltCount = 1;
+        if(element.nodeName === '#text'){
+            fn(0);
+            return;
+        }
         let childCount = element.children.length;
         let updatedChildCount = 0;
         let updateChildren = true;
@@ -32,12 +44,7 @@
                     updateChildren = false;
                     handleImage(backgroundImage, style, childCount, function(imageStatus, url){
                         if(imageStatus === 0){
-                            if(darkenBackgroundColor(element, style) || !status){
-                                lightenColorStyles(element, style);
-                                status = false;
-                            }else{
-                                status = true;
-                            }
+                            status = changeColors(element, style, status);
                         }else if(imageStatus === 2){
                             element.style.setProperty('background-image', 'url(' + url + ')', 'important');
                             status = false;
@@ -65,9 +72,10 @@
                         }
                     });
                 }else{
-                    let newBG = handleBGGradient(backgroundImage);
+                    let newBG = handleGradient(backgroundImage);
                     if(newBG !== null){
                         element.style.setProperty('background-image', newBG, 'important');
+                        darkenBackgroundColor(element, style);
                         lightenColorStyles(element, style);
                         status = false;
                     }else{
@@ -75,12 +83,7 @@
                     }
                 }
             }else{
-                if(darkenBackgroundColor(element, style) || !status){
-                    lightenColorStyles(element, style);
-                    status = false;
-                }else{
-                    status = true;
-                }
+                status = changeColors(element, style, status);
             }
         }else{
             updatedChildCount ++;
@@ -107,6 +110,16 @@
             }
         }
     }
+    function changeColors(element, style, status){
+        let bgStatus = darkenBackgroundColor(element, style);
+        if((bgStatus === 0 && !status) || bgStatus === 2){
+            lightenColorStyles(element, style);
+            return false;
+        }else{
+            return true;
+        }
+
+    }
     function darkenBackgroundColor(element, rawStyle){
         let color = Color.fromRGBString(rawStyle.backgroundColor);
         if(!color.isTransparent()) {
@@ -114,10 +127,12 @@
             if (color.l >= lightnessThreshold) {
                 color.l = 1 - color.l;
                 element.style.setProperty('background-color', color.stringify(), 'important');
-                return true;
+                return 2;
+            }else{
+                return 1;
             }
         }
-        return false;
+        return 0;
     }
     function lightenColorStyles(element, rawStyle){
         if(rawStyle.boxShadow !== 'none'){
@@ -137,8 +152,7 @@
             }
         }
     }
-    /*fn returns
-    status 0 = transparent image (children render with existing parent)
+    /*fn returns  isting parent)
     status 1 = variant image (no change, children render with "normal" parent)
     status 2 = non-variant image (image inverted, children render with "modified" parent)
 
@@ -148,11 +162,15 @@
         let rawYPos = style.backgroundPositionY;
         let rawWidth = style.width;
         let rawHeight = style.height;
-        let size = style.backgroundSize;
+        //handle backgroundSize size somehow
         let xPos = rawXPos.endsWith('px') ? Math.min(parseInt(rawXPos), 0) * -1 : 0;
         let yPos = rawYPos.endsWith('px') ? Math.min(parseInt(rawYPos), 0) * -1 : 0;
         let width = rawWidth.endsWith('px') ? parseInt(rawWidth) : 0;
         let height = rawHeight.endsWith('px') ? parseInt(rawHeight) : 0;
+        if(!width || !height){
+            fn(1);
+            return;
+        }
         let imgUrl = rawUrl.slice(5, -2);
         let imgElt = new Image;
         imgElt.crossOrigin = 'anonymous';
@@ -236,148 +254,54 @@
             }
         }
     }
-    function handleBGGradient(backgroundImage){
-        let funcNameEnd = backgroundImage.indexOf('(');
-        let funcName = backgroundImage.slice(0, funcNameEnd);
-        let rawArgs = backgroundImage.slice(funcNameEnd + 1, -1);
-        let index = 0;
-        let funcSections = [];
-        while(index < rawArgs.length){
-            index = rawArgs.indexOf('(', index);
-            if(index === -1) break;
-            funcSections.push([index]);
-            index = rawArgs.indexOf(')', index);
-            funcSections[funcSections.length - 1].push(index);
-        }
-        index = 0;
-        let lastArgIndex = 0;
-        let args = [];
-
-        mainLoop: while(index < rawArgs.length) {
-            index = rawArgs.indexOf(', ', index);
-            if(index === -1){
-                args.push(rawArgs.slice(lastArgIndex).trim());
-                break;
-            }
-            for (let i = 0; i < funcSections.length; i++) {
-                if (index > funcSections[i][0] && index < funcSections[i][1]){
-                    index ++;
-                    continue mainLoop;
-                }
-            }
-            args.push(rawArgs.slice(lastArgIndex, index).trim());
-            lastArgIndex = index + 1;
-            index ++;
-        }
-        let colors = {};
-        let avgLight = 0;
-        for(let i = 0; i < args.length; i++){
-            let arg = args[i];
-            if(arg.startsWith('rgb')){
-                let color;
-                let position = null;
-                if(arg.endsWith(')')){
-                    color = Color.fromRGBString(arg);
-                }else{
-                    let index = arg.indexOf(')') + 1;
-                    color = Color.fromRGBString(arg.slice(0, index));
-                    position = arg.slice(index + 1);
-                }
-                avgLight += color.l;
-                colors[i] = {
-                    color: color,
-                    position: position
-                };
-            }
-        }
-        avgLight /= args.length;
-        if(avgLight > lightnessThreshold){
-            //The brightness is light on average; invert.
-            for(let i in colors){
-                let color =  colors[i].color;
-                color.l = 1 - color.l;
-            }
-            let styleString = funcName + '(';
-            for(let i = 0; i < args.length; i ++){
-                if(colors.hasOwnProperty(i)){
-                    styleString += colors[i].color.stringify();
-                    if(colors[i].position !== null){
-                        styleString += ' ' + colors[i].position;
-                    }
-                }else{
-                    styleString += args[i];
-                }
-                if(i !== args.length - 1){
-                    styleString += ', ';
-                }
-            }
-            styleString += ')';
-            return styleString;
-        }else{
-            return null;
-        }
+    function handleGradient(str){
+        return handleMultipartCSS(str, true);
     }
     function handleShadow(element, name, style, darken){
-        let shadow = style.getPropertyValue(name);
-        let index = 0;
-        let funcSections = [];
-        while(index < shadow.length){
-            index = shadow.indexOf('(', index);
-            if(index === -1) break;
-            funcSections.push([index]);
-            index = shadow.indexOf(')', index);
-            funcSections[funcSections.length - 1].push(index);
+        let newStr = handleMultipartCSS(style.getPropertyValue(name), darken);
+        if(newStr){
+            element.style.setProperty(name, newStr, 'important');
         }
-        index = 0;
-        let lastArgIndex = 0;
-        let args = [];
-
-        mainLoop: while(index < shadow.length) {
-            index = shadow.indexOf(' ', index);
-            if(index === -1){
-                args.push(shadow.slice(lastArgIndex).trim());
+    }
+    function handleMultipartCSS(str, darken){
+        let colors = [];
+        let strings = [];
+        let startIndex = str.indexOf('rgb');
+        let endIndex = str.indexOf(')', startIndex) + 1;
+        strings.push(str.slice(0, startIndex));
+        let avgLight = 0;
+        while(startIndex < str.length){
+            let colorStart = startIndex;
+            startIndex = str.indexOf('rgb', endIndex);
+            if(startIndex === -1){
+                let color = Color.fromRGBString(str.slice(colorStart, endIndex + 1));
+                colors.push(color);
+                avgLight += color.l;
+                strings.push(str.slice(endIndex + 1));
                 break;
+            }else{
+                let color = Color.fromRGBString(str.slice(colorStart, endIndex));
+                colors.push(color);
+                avgLight += color.l;
+                strings.push(str.slice(endIndex, startIndex));
             }
-            for (let i = 0; i < funcSections.length; i++) {
-                if (index > funcSections[i][0] && index < funcSections[i][1]){
-                    index ++;
-                    continue mainLoop;
-                }
-            }
-            args.push(shadow.slice(lastArgIndex, index).trim());
-            lastArgIndex = index + 1;
-            index ++;
+            endIndex = str.indexOf(')', startIndex);
         }
-        let colors = {};
-        let avgLightness = 0;
-        let colorCount = 0;
-        for(let i = 0; i < args.length; i ++){
-            if(args[i].startsWith('rgb')){
-                let color = Color.fromRGBString(args[i]);
-                avgLightness += color.l;
-                colorCount ++;
-                colors[i] = color;
-            }
-        }
-        avgLightness /= colorCount;
-        let bool = avgLightness < lightnessThreshold;
+        avgLight /= colors.length;
+        let bool = avgLight < lightnessThreshold;
         if(darken){
-            bool = avgLightness > lightnessThreshold;
+            bool = avgLight > lightnessThreshold;
         }
         if(bool){
-            let newShadow = '';
-            for(let i = 0; i < args.length; i ++){
-                if(colors.hasOwnProperty(i)){
-                    colors[i].l = 1 - colors[i].l;
-                    newShadow += colors[i].stringify();
-                }else{
-                    newShadow += args[i];
-                }
-                if(i !== args.length - 1){
-                    newShadow += ' ';
-                }
+            let finalStr = strings[0];
+            for(let i = 0; i < colors.length; i ++){
+                let color = colors[i];
+                color.l = 1 - color.l;
+                finalStr += color.stringify() + strings[i + 1];
             }
-            element.style.setProperty('box-shadow', newShadow, 'important')
+            return finalStr;
+        }else{
+            return null;
         }
     }
     function observeMutations(){
@@ -389,7 +313,8 @@
         let observer = new MutationObserver(function(mutations){
             for(let i = 0; i < mutations.length; i ++){
                 let mutation = mutations[i];
-                console.log(mutation.type);
+                console.log(mutation);
+                console.log(mutation.target[mutation.attributeName]);
                 if(mutation.type === 'attributes'){
                     if(mutation.target.parentElement.hasAttribute('intellidark')){
                         let status = mutation.target.parentElement.getAttribute('intellidark');
@@ -397,7 +322,7 @@
                             //console.log('M-Attr: ' + eltCount + ' node(s) updated.');
                         });
                     }else{
-                        console.warn('Element parent doesn\'t have correct attribute');
+                        console.warn('Parent doesn\'t have correct attribute');
                         console.warn(mutation.target.parentElement);
                     }
                 }else if(mutation.type === 'childList'){
@@ -461,43 +386,6 @@
             }
             console.log('DCL: ' + loadedLinkCount + '/' + linkCount + ' external stylesheets.');
         });
-    }
-    function handleMultipleGradients(str){
-        str = "linear-gradient(rgb(255, 255, 255), rgb(153, 153, 153))";
-        let colors = [];
-        let strings = [];
-        let startIndex = str.indexOf('rgb');
-        let endIndex = str.indexOf(')', startIndex) + 1;
-        strings.push(str.slice(0, startIndex));
-        let avgLight = 0;
-        while(startIndex < str.length){
-            let color = Color.fromRGBString(str.slice(startIndex, endIndex));
-            colors.push(color);
-            avgLight += color.l;
-            startIndex = str.indexOf('rgb', endIndex);
-            if(startIndex === -1){
-                strings.push(str.slice(endIndex + 1));
-                break;
-            }else{
-                strings.push(str.slice(endIndex + 1, startIndex));
-            }
-            endIndex = str.indexOf(')', startIndex);
-        }
-        avgLight /= colors.length;
-        if(avgLight > lightnessThreshold){
-            for(let i = 0; i < colors.length; i ++){
-                let color = colors[i];
-                color.l = 1 - color.l;
-            }
-        }
-        console.log(colors);
-        console.log(strings);
-        let finalStr = strings[0];
-        for(let i = 0; i < colors.length; i ++){
-            finalStr += colors[i].stringify() + strings[i + 1];
-        }
-        console.log(str);
-        console.log(finalStr);
     }
     let Color = function(r, g, b, a){
         r /= 255;
