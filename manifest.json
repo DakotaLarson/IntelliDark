@@ -23,7 +23,7 @@
     {
       "matches": ["<all_urls>"],
       "css": ["invert.css"],
-      "js": ["main.js"],
+      "js": ["fastdom.js","main.js"],
       "run_at": "document_start",
       "all_frames": true
     },

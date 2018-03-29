@@ -2,20 +2,19 @@
     const ignoredNodes = ['STYLE', 'SCRIPT', 'NOSCRIPT', 'IMG', 'VIDEO', 'CANVAS', 'IFRAME'];
     const styles = ['border-left-color', 'border-top-color', 'border-right-color', 'border-bottom-color', 'caret-color', 'outline-color', 'text-decoration-color', 'color'];
     const lightnessThreshold = 0.5;
-    console.log(location);
+    console.log(location.href);
     document.documentElement.setAttribute('intellidark', 'false');
     observeStyleSheets(function(){
         console.log('stylesheets loaded');
-        console.log(document.styleSheets);
     });
     window.addEventListener("load", function() {
-        console.log('load');
+        console.log('Load Event');
         getNodeCount();
         let time = performance.now();
         updateElement(document.body, false, function(eltCount){
             time = Math.round(performance.now() - time);
             console.log('IntelliDark Update Complete (' + eltCount + ' nodes | ' + time + 'ms)');
-            observeMutations();
+            //observeMutations();
         });
     });
     function getNodeCount(){
@@ -36,97 +35,108 @@
         let updateChildren = true;
         //parentStatus = parent rendered "normally"; No JavaScript Manipulations
         let status = parentStatus;
+        let mutations = {};
         if(ignoredNodes.indexOf(element.nodeName) === -1){
-            let style = window.getComputedStyle(element, null);
-            if(style.backgroundImage !== 'none'){
-                let backgroundImage = style.backgroundImage;
-                if(backgroundImage.startsWith('url')){
-                    updateChildren = false;
-                    handleImage(backgroundImage, style, childCount, function(imageStatus, url){
-                        if(imageStatus === 0){
-                            status = changeColors(element, style, status);
-                        }else if(imageStatus === 2){
-                            element.style.setProperty('background-image', 'url(' + url + ')', 'important');
+            fastdom.measure(function(){
+                let style = window.getComputedStyle(element, null);
+                if(style.backgroundImage !== 'none'){
+                    let backgroundImage = style.backgroundImage;
+                    if(backgroundImage.startsWith('url')){
+                        updateChildren = false;
+                        handleImage(backgroundImage, style, childCount, function(imageStatus, url){
+                            if(imageStatus === 0){
+                                status = changeColors(element, style, status, mutations);
+                            }else if(imageStatus === 2){
+                                mutations['background-image'] = 'url(' + url + ')';
+                                status = false;
+                            }else{
+                                status = true;
+                            }
+                            if(element.hasAttribute('intellidark') && element.getAttribute('intellidark') === String(status)){
+                                //Element updated before; current update has no changes; Do not continue.
+                                fn(eltCount);
+                            }else{
+                                element.setAttribute('intellidark', String(status));
+                                let styleStr = stringifyMutations(mutations);
+                                fastdom.mutate(function(){
+                                   element.style.cssText += styleStr;
+                                });
+                                if(childCount === 0){
+                                    fn(eltCount);
+                                }else{
+                                    for(let i = 0; i < childCount; i ++){
+                                        updateElement(element.children[i], status, function(childEltCount){
+                                            eltCount += childEltCount;
+                                            updatedChildCount ++;
+                                            if(updatedChildCount === childCount){
+                                                fn(eltCount);
+                                            }
+                                        });
+                                    }
+                                }
+                            }
+                        });
+                    }else{
+                        let newBG = handleGradient(backgroundImage);
+                        if(newBG !== null){
+                            mutations['background-image'] = newBG;
+                            darkenBackgroundColor(element, style, mutations);
+                            lightenColorStyles(element, style, mutations);
                             status = false;
                         }else{
                             status = true;
                         }
-                        if(element.hasAttribute('intellidark') && element.getAttribute('intellidark') === String(status)){
-                            //Element updated before; current update has no changes; Do not continue.
+                    }
+                }else{
+                    status = changeColors(element, style, status, mutations);
+                }
+                if(updateChildren){
+                    if(element.hasAttribute('intellidark') && element.getAttribute('intellidark') === String(status)){
+                        //Element updated before; current update has no changes; Do not continue.
+                        fn(eltCount);
+                    }else{
+                        element.setAttribute('intellidark', String(status));
+                        let styleStr = stringifyMutations(mutations);
+                        fastdom.mutate(function(){
+                            element.style.cssText += styleStr;
+                        });
+                        if(childCount === 0){
                             fn(eltCount);
                         }else{
-                            element.setAttribute('intellidark', String(status));
-                            if(childCount === 0){
-                                fn(eltCount);
-                            }else{
-                                for(let i = 0; i < childCount; i ++){
-                                    updateElement(element.children[i], status, function(childEltCount){
-                                        eltCount += childEltCount;
-                                        updatedChildCount ++;
-                                        if(updatedChildCount === childCount){
-                                            fn(eltCount);
-                                        }
-                                    });
-                                }
+                            for(let i = 0; i < childCount; i ++){
+                                updateElement(element.children[i], status, function(childEltCount){
+                                    eltCount += childEltCount;
+                                    updatedChildCount ++;
+                                    if(updatedChildCount === childCount){
+                                        fn(eltCount);
+                                    }
+                                });
                             }
                         }
-                    });
-                }else{
-                    let newBG = handleGradient(backgroundImage);
-                    if(newBG !== null){
-                        element.style.setProperty('background-image', newBG, 'important');
-                        darkenBackgroundColor(element, style);
-                        lightenColorStyles(element, style);
-                        status = false;
-                    }else{
-                        status = true;
                     }
                 }
-            }else{
-                status = changeColors(element, style, status);
-            }
+            });
         }else{
             updatedChildCount ++;
         }
-        if(updateChildren){
-            if(element.hasAttribute('intellidark') && element.getAttribute('intellidark') === String(status)){
-                //Element updated before; current update has no changes; Do not continue.
-                fn(eltCount);
-            }else{
-                element.setAttribute('intellidark', String(status));
-                if(childCount === 0){
-                    fn(eltCount);
-                }else{
-                    for(let i = 0; i < childCount; i ++){
-                        updateElement(element.children[i], status, function(childEltCount){
-                            eltCount += childEltCount;
-                            updatedChildCount ++;
-                            if(updatedChildCount === childCount){
-                                fn(eltCount);
-                            }
-                        });
-                    }
-                }
-            }
-        }
     }
-    function changeColors(element, style, status){
-        let bgStatus = darkenBackgroundColor(element, style);
+    function changeColors(element, style, status, mutations){
+        let bgStatus = darkenBackgroundColor(element, style, mutations);
         if((bgStatus === 0 && !status) || bgStatus === 2){
-            lightenColorStyles(element, style);
+            lightenColorStyles(element, style, mutations);
             return false;
         }else{
             return true;
         }
 
     }
-    function darkenBackgroundColor(element, rawStyle){
+    function darkenBackgroundColor(element, rawStyle, mutations){
         let color = Color.fromRGBString(rawStyle.backgroundColor);
         if(!color.isTransparent()) {
             //Element has a background color.
             if (color.l >= lightnessThreshold) {
                 color.l = 1 - color.l;
-                element.style.setProperty('background-color', color.stringify(), 'important');
+                mutations['background-color'] = color.stringify();
                 return 2;
             }else{
                 return 1;
@@ -134,12 +144,18 @@
         }
         return 0;
     }
-    function lightenColorStyles(element, rawStyle){
+    function lightenColorStyles(element, rawStyle, mutations){
         if(rawStyle.boxShadow !== 'none'){
-            handleShadow(element, 'box-shadow', rawStyle, false);
+            let newStr = handleShadow(rawStyle.boxShadow, false);
+            if(newStr){
+                mutations['box-shadow'] = newStr;
+            }
         }
         if(rawStyle.textShadow !== 'none'){
-            handleShadow(element, 'text-shadow', rawStyle, true);
+            let newStr = handleShadow(rawStyle.textShadow, true);
+            if(newStr){
+                mutations['text-shadow'] = newStr;
+            }
         }
         for(let i = 0; i < styles.length; i ++){
             let style = rawStyle.getPropertyValue(styles[i]);
@@ -147,10 +163,18 @@
                 let color = Color.fromRGBString(style);
                 if(color.l < 1 - lightnessThreshold){
                     color.l = 1 - color.l;
-                    element.style.setProperty(styles[i], color.stringify(), 'important');
+                    mutations[styles[i]] = color.stringify();
                 }
             }
         }
+    }
+    function stringifyMutations(mutations){
+        let str = '';
+        let keys = Object.keys(mutations);
+        for(let i = 0; i < keys.length; i ++){
+            str += keys[i] + ': ' + mutations[keys[i]] + ' !important; ';
+        }
+        return str;
     }
     /*fn returns  isting parent)
     status 1 = variant image (no change, children render with "normal" parent)
@@ -257,11 +281,8 @@
     function handleGradient(str){
         return handleMultipartCSS(str, true);
     }
-    function handleShadow(element, name, style, darken){
-        let newStr = handleMultipartCSS(style.getPropertyValue(name), darken);
-        if(newStr){
-            element.style.setProperty(name, newStr, 'important');
-        }
+    function handleShadow(str, darken){
+        return handleMultipartCSS(str, darken);
     }
     function handleMultipartCSS(str, darken){
         let colors = [];
@@ -313,8 +334,6 @@
         let observer = new MutationObserver(function(mutations){
             for(let i = 0; i < mutations.length; i ++){
                 let mutation = mutations[i];
-                console.log(mutation);
-                console.log(mutation.target[mutation.attributeName]);
                 if(mutation.type === 'attributes'){
                     if(mutation.target.parentElement.hasAttribute('intellidark')){
                         let status = mutation.target.parentElement.getAttribute('intellidark');
@@ -384,7 +403,6 @@
                 observer.disconnect();
                 fn();
             }
-            console.log('DCL: ' + loadedLinkCount + '/' + linkCount + ' external stylesheets.');
         });
     }
     let Color = function(r, g, b, a){
