@@ -14,7 +14,7 @@
         updateElement(document.body, false, function(eltCount){
             time = Math.round(performance.now() - time);
             console.log('IntelliDark Update Complete (' + eltCount + ' nodes | ' + time + 'ms)');
-            //observeMutations();
+            observeMutations();
         });
     });
     function getNodeCount(){

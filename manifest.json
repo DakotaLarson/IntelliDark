@@ -1,7 +1,8 @@
 {
   "manifest_version": 2,
-  "name": "IntelliDark",
-  "description": "An intelligent dark theme for the internet!",
+  "name": "IntelliDark: The Intelligent Dark Theme Generator",
+  "short_name": "IntelliDark",
+  "description": "Intelligently inverts page elements for a dark, rich experience",
   "version": "1.0",
   "browser_action": {
     "default_popup": "popup.html"
