@@ -48,7 +48,7 @@
          * schedules a new frame if need be.
          *
          * @param  {Function} fn
-         * @param  {Object} ctx the context to be bound to `fn` (optional).
+         * @param  {Object} [ctx] the context to be bound to `fn` (optional).
          * @public
          */
         measure: function(fn, ctx) {
@@ -65,7 +65,7 @@
          * a new frame if need be.
          *
          * @param  {Function} fn
-         * @param  {Object} ctx the context to be bound to `fn` (optional).
+         * @param  {Object} [ctx] the context to be bound to `fn` (optional).
          * @public
          */
         mutate: function(fn, ctx) {

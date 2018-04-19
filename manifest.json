@@ -23,8 +23,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "css": ["invert.css"],
-      "js": ["fastdom.js","main.js"],
+      "js": ["fastdom.js","test.js"],
       "run_at": "document_start",
       "all_frames": true
     },

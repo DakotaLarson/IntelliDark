@@ -1,9 +1,10 @@
 (function(){
     const ignoredNodes = ['STYLE', 'SCRIPT', 'NOSCRIPT', 'IMG', 'VIDEO', 'CANVAS', 'IFRAME'];
     const styles = ['border-left-color', 'border-top-color', 'border-right-color', 'border-bottom-color', 'caret-color', 'outline-color', 'text-decoration-color', 'color'];
+    const darkFillNames = ['rect', 'circle', 'ellipse', 'polygon'];
     const lightnessThreshold = 0.5;
     console.log(location.href);
-    document.documentElement.setAttribute('intellidark', 'false');
+    document.documentElement.setAttribute('intellidark', 'true');
     observeStyleSheets(function(){
         console.log('stylesheets loaded');
     });
@@ -11,11 +12,12 @@
         console.log('Load Event');
         getNodeCount();
         let time = performance.now();
-        updateElement(document.body, false, function(eltCount){
-            time = Math.round(performance.now() - time);
-            console.log('IntelliDark Update Complete (' + eltCount + ' nodes | ' + time + 'ms)');
-            observeMutations();
-        });
+        // updateElement(function(eltCount){
+        //     time = Math.round(performance.now() - time);
+        //     console.log('IntelliDark Update Complete (' + eltCount + ' nodes | ' + time + 'ms)');
+        //     observeMutations();
+        // }, document.body, false, false);
+        // fastdom.mutate(removeInitialStyle);
     });
     function getNodeCount(){
         let time = performance.now();
@@ -24,11 +26,16 @@
         console.log(count + ' nodes | ' + time + 'ms');
         return count;
     }
-    function updateElement(element, parentStatus, fn){
+    function updateElement(fn, element, parentStatus, svg){
         let eltCount = 1;
-        if(element.nodeName === '#text'){
+        let name = element.nodeName;
+        if(name === '#text'){
             fn(0);
             return;
+        }
+        let testSVG = false;
+        if(svg || name === 'svg'){
+            testSVG = true;
         }
         let childCount = element.children.length;
         let updatedChildCount = 0;
@@ -45,7 +52,7 @@
                         updateChildren = false;
                         handleImage(backgroundImage, style, childCount, function(imageStatus, url){
                             if(imageStatus === 0){
-                                status = changeColors(element, style, status, mutations);
+                                status = changeColors(element, style, status, testSVG, mutations);
                             }else if(imageStatus === 2){
                                 mutations['background-image'] = 'url(' + url + ')';
                                 status = false;
@@ -65,13 +72,13 @@
                                     fn(eltCount);
                                 }else{
                                     for(let i = 0; i < childCount; i ++){
-                                        updateElement(element.children[i], status, function(childEltCount){
+                                        updateElement(function(childEltCount){
                                             eltCount += childEltCount;
                                             updatedChildCount ++;
                                             if(updatedChildCount === childCount){
                                                 fn(eltCount);
                                             }
-                                        });
+                                        }, element.children[i], status, testSVG);
                                     }
                                 }
                             }
@@ -88,7 +95,7 @@
                         }
                     }
                 }else{
-                    status = changeColors(element, style, status, mutations);
+                    status = changeColors(element, style, status, testSVG, mutations);
                 }
                 if(updateChildren){
                     if(element.hasAttribute('intellidark') && element.getAttribute('intellidark') === String(status)){
@@ -104,13 +111,13 @@
                             fn(eltCount);
                         }else{
                             for(let i = 0; i < childCount; i ++){
-                                updateElement(element.children[i], status, function(childEltCount){
+                                updateElement(function(childEltCount){
                                     eltCount += childEltCount;
                                     updatedChildCount ++;
                                     if(updatedChildCount === childCount){
                                         fn(eltCount);
                                     }
-                                });
+                                }, element.children[i], status, testSVG);
                             }
                         }
                     }
@@ -120,7 +127,10 @@
             updatedChildCount ++;
         }
     }
-    function changeColors(element, style, status, mutations){
+    function changeColors(element, style, status, testSVG, mutations){
+        if(testSVG){
+            handleFill(element, style, mutations);
+        }
         let bgStatus = darkenBackgroundColor(element, style, mutations);
         if((bgStatus === 0 && !status) || bgStatus === 2){
             lightenColorStyles(element, style, mutations);
@@ -129,6 +139,21 @@
             return true;
         }
 
+    }
+    function handleFill(element, style, mutations){
+        let fillColor = Color.fromRGBString(style.fill);
+        if(darkFillNames.indexOf(element.nodeName) !== -1){
+            //The element is a basic shape; invert.
+            if(fillColor.l > lightnessThreshold){
+                fillColor.l = 1 - fillColor.l;
+                mutations['fill'] = fillColor.stringify();
+            }
+        }else{
+            if(fillColor.l < lightnessThreshold){
+                fillColor.l = 1 - fillColor.l;
+                mutations['fill'] = fillColor.stringify();
+            }
+        }
     }
     function darkenBackgroundColor(element, rawStyle, mutations){
         let color = Color.fromRGBString(rawStyle.backgroundColor);
@@ -337,9 +362,9 @@
                 if(mutation.type === 'attributes'){
                     if(mutation.target.parentElement.hasAttribute('intellidark')){
                         let status = mutation.target.parentElement.getAttribute('intellidark');
-                        updateElement(mutation.target, status, function(eltCount){
+                        updateElement(function(eltCount){
                             //console.log('M-Attr: ' + eltCount + ' node(s) updated.');
-                        });
+                        }, mutation.target, status, mutation.target.nodeName === 'svg');
                     }else{
                         console.warn('Parent doesn\'t have correct attribute');
                         console.warn(mutation.target.parentElement);
@@ -351,13 +376,13 @@
                         let eltUpdateTotal = 0;
                         let eltCount = mutation.addedNodes.length;
                         for(let i = 0; i < eltCount; i ++){
-                            updateElement(mutation.addedNodes[i], status, function(eltCount){
+                            updateElement(function(eltCount){
                                 eltUpdateTotal += eltCount;
                                 eltTotal ++;
                                 if(eltTotal === eltCount){
                                     //console.log('M-ChLi: ' + eltUpdateTotal + ' node(s) updated.');
                                 }
-                            });
+                            }, mutation.addedNodes[i], status, mutation.target.nodeName === 'svg');
                         }
                     }else{
                         console.warn('Element doesn\'t have correct attribute');
@@ -375,7 +400,12 @@
         let linkCount = 0;
         let loadedLinkCount = 0;
         let domLoaded = false;
+        let initialStyleInserted = false;
         let observer = new MutationObserver(function(mutations){
+            if(!initialStyleInserted && document.head){
+                insertInitialStyle();
+                initialStyleInserted = true;
+            }
             for(let i = 0; i < mutations.length; i ++){
                 let mutation = mutations[i];
                 for(let i = 0; i < mutation.addedNodes.length; i ++){
@@ -398,12 +428,29 @@
         });
         observer.observe(document.documentElement, options);
         window.addEventListener('DOMContentLoaded', function(){
+            if(!initialStyleInserted){
+                insertInitialStyle();
+                initialStyleInserted = true;
+            }
             domLoaded = true;
             if(loadedLinkCount >= linkCount){
                 observer.disconnect();
                 fn();
             }
         });
+    }
+    function insertInitialStyle(){
+        let styleElt = document.createElement('style');
+        styleElt.type = 'text/css';
+        styleElt.id = 'intellidarkstyle';
+        document.head.appendChild(styleElt);
+        let sheet = styleElt.sheet;
+        let htmlRule = 'html{background-color: #000 !important; filter: invert(100%) !important;}';
+        let contraryRule = 'img, video, canvas, iframe, svg image{filter: invert(100%) !important;}';
+        sheet.insertRule('@media only screen {' + htmlRule + contraryRule + '}', 0);
+    }
+    function removeInitialStyle(){
+        document.head.querySelector('#intellidarkstyle').sheet.disabled = true;
     }
     let Color = function(r, g, b, a){
         r /= 255;
