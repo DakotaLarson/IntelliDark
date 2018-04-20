@@ -51,20 +51,45 @@
     }
     function observeBody(){
         log('body being observed');
-        let options = {
+        const ignoredNodes = ['#text', 'STYLE', 'SCRIPT', 'NOSCRIPT', 'IMG', 'VIDEO', 'CANVAS', 'IFRAME'];
+        const hierarchy = [];
+        const options = {
             childList: true,
             attributes: true,
             subtree: true
         };
-        let observer = new MutationObserver(function(mutations){
-            log(mutations.length);
+        const observer = new MutationObserver(function(mutations){
+            for(let i = 0; i < mutations.length; i ++){
+                let mutation = mutations[i];
+                if(mutation.type === 'childList'){
+                    for(let i = 0; i < mutation.addedNodes.length; i ++){
+                        handleMutation(mutation.addedNodes[i]);
+                    }
+                }else if(mutation.type === 'attributes'){
+                    handleMutation(mutation.target);
+                }
+            }
         });
         observer.observe(document.body, options);
-        fastdom.mutate(function(){
-             log('test');
-             log(hashCode('test'));
-             log(hashCode(String(document.body)));
-        })
+        fastdom.mutate(function(mutations){
+
+             log('first mutation complete');
+        });
+        function handleMutation(element){
+            if(ignoredNodes.indexOf(element.nodeName) === -1){
+                for(let i = 0; i < hierarchy.length; i ++){
+                    let position = element.compareDocumentPosition(hierarchy[i]);
+                    if(position & Node.DOCUMENT_POSITION_CONTAINED_BY){
+                        //element is the parent of the hierarchy element
+
+                    }else if(position & Node.DOCUMENT_POSITION_CONTAINS){
+                        //element is a child of the hierarchy element
+                    }
+                }
+                log(element.compareDocumentPosition(document.body) & Node.DOCUMENT_POSITION_CONTAINS);
+                //log(element.hasAttribute('intellidark-id'));
+            }
+        }
     }
     function removeInitialStyle(){
         document.head.querySelector('#intellidarkstyle').sheet.disabled = true;

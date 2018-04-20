@@ -23,14 +23,13 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["fastdom.js","test.js"],
+      "js": ["fastdom.js", "test.js"],
       "run_at": "document_start",
       "all_frames": true
     },
     {
       "matches": ["chrome://*/*"],
-      "css": ["invert.css"],
-      "js": ["main.js"],
+      "js": ["fastdom.js", "test.js"],
       "run_at": "document_start"
     }
   ]
