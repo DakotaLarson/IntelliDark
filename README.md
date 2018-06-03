@@ -9,3 +9,5 @@ IntelliDark: An intelligent dark theme for the internet!
   * Debug Image Inversion
   * Handle Pseudo Classes (hover, active, etc.)
   * Handle Pseudo Elements through getComputedStyle
+
+Work on extension has been halted as DarkReader has implemented a Dynamic theme generator similar to the end goals of this project. Work on this project will resume if there are obvious fautls in the leading dark theme gemerating extension that can be resolved by IntelliDark. Competition for the sake of competition benefits nobody.
